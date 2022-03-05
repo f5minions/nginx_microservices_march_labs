@@ -79,7 +79,7 @@ $ kubectl apply -f 1-deployment.yaml
 deployment.apps/podinfo configured
 ```
 
-And you can visit the app with:
+그리고 아래와 같이 배포된 애플리케이션에 직접 접속을 할 수 있습니다.
 
 ```bash
 $ minikube service podinfo
@@ -97,55 +97,45 @@ $ minikube service podinfo
 🎉  Opening service default/podinfo in default browser...
 ```
 
-At this point, you should see the app.
+아래와 같이 배포된 앱이 보여지면 정상적으로 완료된 것 입니다.
 
-**Note:** If you are in the F5 Unified Demo Framework (UDF), use the Podinfo access method to view the app.
+![podinfo 배포 서비스에 대한 웰컴 페이지](assets/podinfo.png)
 
-![The podinfo welcome page](assets/podinfo.png)
+_하지만 여기에 문제가 하나 있습니다_
 
-_There's an issue, though._
+우리는 위 배포 YAML에서 service type을 `type: LoadBalancer`로 사용을 했기 때문에 아래의 환경이 아니라면 아무런 설정이 되지 않습니다. 
 
-You used a service of `type: LoadBalancer` that in turn:
+- 만약 Azure, AWS 또는 GCP와 같은 퍼블릭 클라우드 서비스 프로바이더를 사용한다면 클러스터 앞에 자동으로 로드밸런서를 생성하고 설정을 합니다.
+- 또는 베어메탈 클러스터에 [MetalLB](https://metallb.universe.tf/) 또는 [Kube-VIP](https://kube-vip.chipzoller.dev/)를 사용하지 않을 경우 LoadBalancer IP에 아무런 설정이 되지 않습니다. 
 
-- Creates an actual load balancer, if you are using a cloud provider such as Azure, AWS or GCP or
-- Sits idle doing nothing if you are on a bare-metal cluster — unless you install [MetalLB](https://metallb.universe.tf/) or [Kube-VIP](https://kube-vip.chipzoller.dev/).
+어느 쪽이든, 단일 POD를 NODE PORT로 서비스를 노출할 수 있다는 것은 확인할 수 있습니다.
 
-Either way, you should notice that the service exposes a single set of Pods.
+그리고 이 경우 노출해야하는 서비스가 여러 개일 경우엔 같은 수의 로드밸런서를 생성해야 할 수도 있습니다. _예를 들어, 외부 노출이 필요한 서비스가 10개가 있다고 가정하면 로드밸런서도 10개가 생성되고 설정이 되어야 합니다_
+**물론 구성하는 로드밸런서가 그렇게 비싸지 않다문 문제가 되지 않습니다.**
 
-If you have multiple services that need to be exposed, you might need to create the same amount of load balancers.
+_이 문제를 어떻게 해결할 수 있을까요?_
 
-_Imagine having ten applications that have to be exposed; you might end up with ten Load Balancers._
+## Ingress 리소스와 Ingress Controller
 
-**That wouldn't be a problem if those load balancers weren't so expensive.**
+Kubernetes에는 위와 같이 로드밸런서가 증가하는 문제를 해결하기 위해 Ingress라는 또 다른 리소스가 설계 되었습니다. 
 
-_How can you get around this issue?_
+Ingress는 두 부분으로 구성:
 
-## The Ingress manifest and the ingress controller
+1. 첫번째는 Kubernetes의 Deployment 또는 Service와 동일한 **Ingress 리소스** 입니다.
+1. 두번째는 위 Ingress 리소스를 통해 설정한 정책을 수행하는 **Ingress 컨트롤러** 입니다.
 
-In Kubernetes, another resource is designed to solve the problem with proliferating load balancers: the Ingress.
+즉, Ingress 컨트롤러는 트래픽을 POD로 라우팅하는 Reverse Proxy 역활을 수행합니다. 
+![Kuberntes에서 Ingress](assets/ingress-reverse-proxy.png)
 
-The Ingress has two parts:
+Ingress는 경로, 도메인, 헤더 등을 기반으로 트래픽을 라우팅하여 Kubernetes 내부에서 실행되는 단일 리소스에 여러 엔트포인트를 통합합니다. 이를 통해 하나의 노출된 로드밸런서에서 동시에 여러 서비스를 제공할 수 있습니다.
 
-1. The first is the **Ingress manifest**, which is the same as Deployment or Service in Kubernetes.
-1. The second part is the **Ingress controller**. This is the actual part that sends the traffic to the pods.
+Kubernetes에는 Ingress Controller가 사전 설치된 형태로 제공되지 않기 때문에 사용자가 필요 시 직접 선택하여 설치해야 합니다.
 
-In other words, the Ingress controller acts as a reverse proxy that routes the traffic to your Pods.
+[Ingress 컨트롤러는 여러 제품이 있지만, ](https://docs.google.com/spreadsheets/d/191WWNpjJ2za6-nbG4ZoUMXMpUK8KlCIosvQB0f-oq3k/) 이 문서는 대표적으로 가장 많이 사용하는 NGINX Ingress 컨트롤러를 사용합니다.
 
-![The Ingress in Kubernetes](assets/ingress-reverse-proxy.png)
+아래의 절차를 통해서 NGINX Ingress 컨트롤러를 설치해 봅시다.
 
-The Ingress routes the traffic based on paths, domains, headers, etc., consolidating multiple endpoints in a single resource that runs inside Kubernetes.
-
-With this, you can serve multiple services simultaneously from one exposed load balancer.
-
-Kubernetes doesn't come with an Ingress Controller preinstalled.
-
-Instead, you have to choose and install it by yourself.
-
-[There are several competing products in this space,](https://docs.google.com/spreadsheets/d/191WWNpjJ2za6-nbG4ZoUMXMpUK8KlCIosvQB0f-oq3k/) but you will use the NGINX Ingress Controller in this article.
-
-Let's see it in action.
-
-## Installing the NGINX Ingress controller
+## NGINX Ingress 컨트롤러의 설치
 
 The quicker way to install the controller is to use Helm.
 
