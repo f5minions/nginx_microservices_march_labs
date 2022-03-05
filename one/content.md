@@ -1,31 +1,24 @@
-_TL;DR: In this article, you will learn how to deploy the NGINX Ingress Controller and autoscale it based on the number of active requests with Prometheus and KEDA._
+이번 랩을 통해서 Prometheus와 KEDA를 이용하여 사용자의 요청(request)가 증가함에 따라 NGINX Ingress Controller로 이에 맞춰 자동으로 스케일 아웃을 수행하는 방법에 대해서 확인할 수 있습니다.
 
-![Autoscaling NGINX based on the number of active connections](assets/end-to-end-preview.gif)
+![Active Connection의 수에 기반한 NGINX의 자동확장](assets/end-to-end-preview.gif)
 
-# Overview
-When you expose applications from your Kubernetes cluster to the public internet, you often need a component that can:
+# 요약
+일반적으로 Kubernetes 기반의 애플리케이션을 외부(인터넷)로 서비스하려고 할 때, 우리는 아래와 같은 컴포넌트가 필요 합니다.
 
-- Forward requests to the correct application based on paths, domain names, headers, etc.
-- Ingest a large number of requests while keeping a low latency.
-- Terminate SSL.
-- Apply policies such as rate limiting and authentication.
+- 사용자의 요청을 URL패스, 도메인이름, 해더 등의 정보에 기반하여 애플리케이션까지 전달
+- SSL 암/복호화
+- 낮은 지연율을 유지하면서 많은 수의 사용자 요청을 처리
+- Rate Limiting 또는 Authentication 등과 같은 정책을 적용
 
-Since those are very common operations, Kubernetes provides a built-in mechanism to collect and list the requirements for each [routing decision via the Ingress.](https://kubernetes.io/docs/concepts/services-networking/ingress/)
+이는 아주 일반적인 작업으로 Kubernetes는 Ingress를 통해서 요구되는 항목을 기준으로 사용자 요청을 라우팅하는 매커니니즘을 제공하고 있습니다. [Ingress를 통한 요청 라우틴](https://kubernetes.io/docs/concepts/services-networking/ingress/)
 
-However, it does not prescribe how those requirements are fulfilled.
+하지만 이러한 요구사항이 충족될 수 있는 방법에 대해서는 규정하지 않기 때문에 사용자의 요청을 적절한 POD로 라우팅을 위한 애플리케이션은 직접 설치 및 구성을 해야 합니다. 우리는 [NGINX Ingress Controller](https://github.com/nginxinc/kubernetes-ingress/)를 클러스터에 설치하고 애플리케이션이 사용자 요청을 처리(또는 보호)하는 컴포넌트로 구성할 수 있습니다.
 
-In other words, there is no application preinstalled that can route the traffic to your Pods.
+그럼 어떻게 구성되는지 살펴보도록 하겠습니다.
+## 서비스를 위한 K8S 클러스터 환경의 구성과 애플리케이션의 배포
 
-Instead, you should install it by yourself.
-
-You can install the [NGINX Ingress Controller](https://github.com/nginxinc/kubernetes-ingress/) in your cluster and make it the designed component to route traffic (and protect) your app.
-
-Let's have a look at how it works.
-
-## Creating a cluster and deploying an app
-
-Let's start by creating a local cluster with minikube:
-
+Minikube를 이용한 로컬 환경에 K8S 클러스터를 생성:
+(참고: 맥북에서 brew install kubectl minikube를 통해서 설치를 수행할 수 있습니다. 또는 [팬도라님의 Mac OS에서 minikube 사용하기 Part 1](https://judo0179.tistory.com/70)를 참고해서 환경을 구성할 수 있습니다)
 ```bash
 minikube start --memory=4G
 😄  minikube v1.24.0
@@ -43,9 +36,7 @@ minikube start --memory=4G
 🏄  Done! kubectl is now configured to use the cluster and "default" namespace by default
 ```
 
-Before exploring how to expose an application to your Kubernetes cluster, let's create the app itself.
-
-The following definition creates a Deployment with a single replica and a Service:
+먼저 하나의 애플리케이션을 생성된 클러스터에 배포 합니다. 아래 예제코드는 하나의 애플리케이션과 하나의 서비스를 생성하는 간단한 코드 입니다. 
 
 ```yaml
 apiVersion: apps/v1
@@ -81,7 +72,7 @@ spec:
   type: LoadBalancer
 ```
 
-You can submit the YAML file with:
+위 코드를 YAML 파일을 저장 후 아래와 같이 kubectl 명령으로 수행하여 배포를 합니다:
 
 ```terminal|command=1|title=bash
 $ kubectl apply -f 1-deployment.yaml
