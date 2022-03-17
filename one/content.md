@@ -137,18 +137,18 @@ Kubernetes에는 Ingress Controller가 사전 설치된 형태로 제공되지 �
 
 ## NGINX Ingress 컨트롤러의 설치
 
-The quicker way to install the controller is to use Helm.
+NGINX Ingress Controller의 빠른 설치 방법 중 하나로 helm을 많이 활용하고 있기 때문에 우리는 Helm 기반의 NGINX Ingress Controller 설치로 진행을 해보도록 하겠습니다.
 
-[You can find the instructions on how to install Helm on the official website.](https://helm.sh/docs/intro/install)
+[Helm을 사용하기 위해서는 helm을 설치해야 하는데 공식 사이트에서 참고하시면 됩니다.](https://helm.sh/docs/intro/install)
 
-Next, add the following repository to Helm:
+먼저 NGINX Ingress Controller의 Helm 설치를 위해서 NGINX Repository를 Helm에 추가합니다.
 
 ```bash
 $ helm repo add nginx-stable https://helm.nginx.com/stable
 "nginx-stable" has been added to your repositories
 ```
 
-Next, you can download and install the NGINX Ingress Controller in your cluster with:
+그리고 아래 Helm 명령을 통해 NGINX Ingress Controller를 자신의 클러스터 환경에 설치를 수행 합니다.
 
 ```bash
 $ helm install main nginx-stable/nginx-ingress \
@@ -160,7 +160,7 @@ REVISION: 1
 The NGINX Ingress Controller has been installed.
 ```
 
-Verify that the controller is running with:
+설치 후 자신의 클러스터 환경에서 NGINX Ingress Controller가 정상적으로 동작하는가를 확인할 수 있습니다.
 
 ```bash
 $ kubectl get pods -l "app=main-nginx-ingress"
@@ -168,9 +168,7 @@ NAME                                  READY   STATUS    RESTARTS
 main-nginx-ingress-6494446486-fvr6k   1/1     Running   0
 ```
 
-You're ready to use the Ingress manifest to route traffic to your app.
-
-You can use the following Ingress manifest definition to start:
+이제 여러분의 환경에서 트래픽을 애플리케이션으로 라우팅할 수 있는 Ingress를 사용할 수 있는 준비가 되었습니다. 아래 기본 Ingress 구문을 통해 간단하게 트래픽 라우팅을 시험할 수 있습니다.
 
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -192,14 +190,14 @@ spec:
             pathType: Prefix
 ```
 
-You can submit the Ingress manifest to your cluster with:
+위 Ingress 설정을 자신의 클러스터에 배포 합니다.
 
 ```bash
 $ kubectl apply -f 2-ingress.yaml
 ingress.networking.k8s.io/podinfo created
 ```
 
-Now let's expose the Ingress with:
+서비스 접속을 위해 Ingress 서비스를 외부에 노출 합니다.
 
 ```bash
 $ minikube service main-nginx-ingress --url
@@ -214,9 +212,9 @@ http://127.0.0.1:55431
 http://127.0.0.1:55432
 ```
 
-> Unfortunately, you can't open those URLs in the browser as you need to include the domain name in the request.
+> 하지만, 여러분들은 위 확인된 서비스로의 접속을 하면 404 Not Found 메세지와 함께 원하는 애플리케이션으로의 트래픽 라우팅을 확인할 수 없습니다. Ingress는 domain 요청을 기반으로 하기 때문에 위와 같이 IP로 접속할 경우 정상적인 서비스 접속을 할 수 없습니다. 
 
-You can use the first URL to issue a request to your app:
+그래서 아래와 같이 브라우저가 아닌 cURL을 통해서 요청을 전달 시 domain을 명시 후 테스트를 할 수 있습니다.
 
 ```bash
 $ curl -H "Host: example.com" http://127.0.0.1:55431
@@ -234,12 +232,12 @@ $ curl -H "Host: example.com" http://127.0.0.1:55431
   "num_cpu": "4"
 }
 ```
+_훌륭합니다! 이제 예상했던 방식으로 동작을 확인할 수 있습니다!_
 
-_Excellent, it worked!_
+이제 여러분은 애플리케이션으로 트래픽을 라우팅할 수 있는 자신만의 Ingress Controller가 준비되었습니다. 지금부터는 Ingress Controller의 스케일링에 대해서 고민을 해보도록 하겠습니다.
 
-Now that you have an Ingress controller that can route the traffic to your apps, it's time to think about scaling it.
+## NGINX Ingress Controller를 통해 제공되는 메트릭 정보의 확인
 
-## Inspecting metrics exposed by the NGINX Ingress Controller
 
 As you already discovered, the Ingress controller is just a regular Pod that bundles a reverse proxy (NGINX) with some code that integrates with Kubernetes.
 
